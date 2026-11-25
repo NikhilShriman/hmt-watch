@@ -1,0 +1,24 @@
+name: hmt-stock-watch
+on:
+  schedule:
+    - cron: "*/30 * * * *"  # private repo: 48 runs/day ≈ 1440 of 2000 free min/month
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: watch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 hmt_watch.py
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+      - name: Save state
+        run: |
+          git diff --quiet state.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "state update" && git push
