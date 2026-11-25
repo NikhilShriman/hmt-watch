@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Telegram alert when HMT Janata Automatic White comes in stock (.store / .in).
+"""Telegram alert when watched HMT watches come in stock (.store / .in).
 
 Run from cron. Alerts only on state change (out -> in, or check breaks), so no spam.
 Config: env TG_TOKEN, TG_CHAT (put them in ~/hmt-watch/env).
 """
-import json, os, re, subprocess, sys
+import json, os, re, subprocess, sys, time
 from pathlib import Path
 
-URLS = [
-    "https://www.hmtwatches.store/product/44333eb5-32ae-4189-85ab-209a8a451249",
-    # Add the .in product URL here once it's listed, e.g.
-    # "https://www.hmtwatches.in/product-NNNN-hmt-janata-automatic-white",
-]
+URLS = {  # url -> name shown in the alert
+    "https://www.hmtwatches.store/product/44333eb5-32ae-4189-85ab-209a8a451249": "Janata Automatic White (.store)",
+    "https://www.hmtwatches.store/product/5cb806d1-3afa-4511-80b4-49e457c1cbab": "Pilot Automatic Black (.store)",
+    "https://www.hmtwatches.in/product-1246-hmt-pilot-automatic-ls-black": "Pilot Automatic LS Black (.in)",
+    "https://www.hmtwatches.in/product-1247-hmt-pilot-automatic-ls-black-black-strap": "Pilot Automatic LS Black, black strap (.in)",
+}
 STATE = Path(__file__).with_name("state.json")
 UA = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
@@ -31,10 +32,11 @@ def status(url, html):
         label = html[i + len(marker):html.find("<", i + len(marker))].lower()
         tag = html[html.rfind("<button", 0, i):i]
         return "out" if "out of stock" in label or 'disabled=""' in tag else "in"
-    # .in (Laravel site). ponytail: text heuristic, unverified on a live in-stock page.
-    if re.search(r"(?i)stock awaited|out of stock|sold out", html):
-        return "out"
-    return "in" if re.search(r"(?i)add to cart|buy now", html) else "unknown"
+    # .in (Laravel): out-of-stock product shows a "Notify Me" button (id="notifyMe") in the
+    # product's action block. Every page also has "Add To Cart" in quick-view modals, so don't key on that.
+    if 'id="is_add_to_cart"' not in html:
+        return "unknown"
+    return "out" if 'id="notifyMe"' in html else "in"
 
 
 def fetch(url):
@@ -53,7 +55,7 @@ def telegram(text):
 
 def main():
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
-    for url in URLS:
+    for url, name in URLS.items():
         try:
             s = status(url, fetch(url))
         except Exception as e:
@@ -62,12 +64,14 @@ def main():
         print(url, s)
         if s != state.get(url):
             if s == "in":
-                telegram(f"🟢 HMT Janata Automatic White IN STOCK\n{url}")
+                telegram(f"🟢 HMT {name} IN STOCK\n{url}")
             elif s == "unknown":
-                telegram(f"⚠️ HMT watcher can't read stock status (blocked or page changed)\n{url}")
+                telegram(f"⚠️ HMT watcher can't read stock status for {name} (blocked or page changed)\n{url}")
             elif state.get(url) == "in":
-                telegram(f"🔴 Back out of stock\n{url}")
+                telegram(f"🔴 HMT {name} back out of stock\n{url}")
             state[url] = s
+    # Changes monthly -> workflow commits -> GitHub doesn't pause the schedule after 60 idle days.
+    state["_keepalive"] = time.strftime("%Y-%m")
     STATE.write_text(json.dumps(state, indent=1))
 
 
@@ -77,8 +81,10 @@ def demo():
     assert status(st, btn.format("Out of Stock")) == "out"
     assert status(st, btn.replace(' disabled=""', "").format("Add to Cart")) == "in"
     assert status(st, "<html>blocked</html>") == "unknown"
-    assert status("https://www.hmtwatches.in/p", "Stock Awaited") == "out"
-    assert status("https://www.hmtwatches.in/p", "<button>Add to Cart</button>") == "in"
+    act = '<input type="hidden" id="is_add_to_cart" value="1">{}<button>Add To Cart</button>'
+    assert status("https://www.hmtwatches.in/p", act.format('<a id="notifyMe" onclick="notifyMe(1)">Notify Me</a>')) == "out"
+    assert status("https://www.hmtwatches.in/p", act.format("")) == "in"
+    assert status("https://www.hmtwatches.in/p", "Too Many Requests") == "unknown"
     print("demo ok")
 
 

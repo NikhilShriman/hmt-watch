@@ -1,7 +1,7 @@
 name: hmt-stock-watch
 on:
   schedule:
-    - cron: "*/30 * * * *"  # private repo: 48 runs/day ≈ 1440 of 2000 free min/month
+    - cron: "*/15 * * * *"  # public repo: unlimited free minutes
   workflow_dispatch:
 permissions:
   contents: write
