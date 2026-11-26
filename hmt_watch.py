@@ -13,6 +13,7 @@ URLS = {  # url -> name shown in the alert
     "https://www.hmtwatches.store/product/5cb806d1-3afa-4511-80b4-49e457c1cbab": "Pilot Automatic Black (.store)",
     "https://www.hmtwatches.in/product-1246-hmt-pilot-automatic-ls-black": "Pilot Automatic LS Black (.in)",
     "https://www.hmtwatches.in/product-1247-hmt-pilot-automatic-ls-black-black-strap": "Pilot Automatic LS Black, black strap (.in)",
+    "https://www.hmtwatches.in/product-1115-hmt-janata-automatic-white": "Janata Automatic White (.in)",
 }
 STATE = Path(__file__).with_name("state.json")
 IST = timezone(timedelta(hours=5, minutes=30))
