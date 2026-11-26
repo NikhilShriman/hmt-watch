@@ -74,8 +74,8 @@ def check(state):
 
 
 def main():
-    # Workflow starts every 30 min. Night (22-08 IST): one check per run.
-    # Day: re-check every 3 min for ~25 min, until the next run takes over (Actions cron min is 5 min).
+    # GitHub drops/delays most scheduled runs (saw 2 of ~40 fire in a day), so each run
+    # loops ~5.5h itself (job limit 6h, free on public repo): every 3 min by day, 15 min at night.
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     start = time.time()
     while True:
@@ -87,9 +87,9 @@ def main():
             telegram(f"✅ HMT watcher alive ({today})\n{lines}")
             state["_heartbeat"] = today  # changes daily -> commit -> schedule never auto-paused
         STATE.write_text(json.dumps(state, indent=1))
-        if not 8 <= now.hour < 22 or time.time() - start > 24 * 60:
+        if time.time() - start > 330 * 60:
             break
-        time.sleep(180)
+        time.sleep(180 if 8 <= now.hour < 22 else 900)
 
 
 def demo():
