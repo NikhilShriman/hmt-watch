@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write  # lets the run start the next one
 concurrency: watch
 jobs:
   check:
@@ -16,9 +17,14 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
+          HC_URL: ${{ secrets.HC_URL }}
       - name: Save state
         run: |
           git diff --quiet state.json && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "state update" && git push
+          git commit -am "state update" && git pull --rebase -q && git push
+      - name: Start next run  # GitHub skips most cron triggers; chain instead. Cron above restarts chain if a run fails.
+        run: gh workflow run watch.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

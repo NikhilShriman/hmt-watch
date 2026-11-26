@@ -87,6 +87,8 @@ def main():
             telegram(f"✅ HMT watcher alive ({today})\n{lines}")
             state["_heartbeat"] = today  # changes daily -> commit -> schedule never auto-paused
         STATE.write_text(json.dumps(state, indent=1))
+        if os.environ.get("HC_URL"):  # healthchecks.io dead-man switch: alerts if pings stop
+            subprocess.run(["curl", "-sf", "-m", "10", "--retry", "3", os.environ["HC_URL"]], capture_output=True)
         if time.time() - start > 330 * 60:
             break
         time.sleep(180 if 8 <= now.hour < 22 else 900)
