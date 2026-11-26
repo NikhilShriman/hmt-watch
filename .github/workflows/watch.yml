@@ -1,7 +1,7 @@
 name: hmt-stock-watch
 on:
   schedule:
-    - cron: "*/15 * * * *"  # public repo: unlimited free minutes
+    - cron: "0,30 * * * *"  # day runs loop every 3 min inside (see main); public repo = free minutes
   workflow_dispatch:
 permissions:
   contents: write
@@ -9,7 +9,7 @@ concurrency: watch
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - run: python3 hmt_watch.py

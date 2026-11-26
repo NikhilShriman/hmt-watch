@@ -5,6 +5,7 @@ Run from cron. Alerts only on state change (out -> in, or check breaks), so no s
 Config: env TG_TOKEN, TG_CHAT (put them in ~/hmt-watch/env).
 """
 import json, os, re, subprocess, sys, time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 URLS = {  # url -> name shown in the alert
@@ -14,6 +15,7 @@ URLS = {  # url -> name shown in the alert
     "https://www.hmtwatches.in/product-1247-hmt-pilot-automatic-ls-black-black-strap": "Pilot Automatic LS Black, black strap (.in)",
 }
 STATE = Path(__file__).with_name("state.json")
+IST = timezone(timedelta(hours=5, minutes=30))
 UA = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -53,8 +55,7 @@ def telegram(text):
                    check=True, capture_output=True)
 
 
-def main():
-    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+def check(state):
     for url, name in URLS.items():
         try:
             s = status(url, fetch(url))
@@ -70,9 +71,25 @@ def main():
             elif state.get(url) == "in":
                 telegram(f"🔴 HMT {name} back out of stock\n{url}")
             state[url] = s
-    # Changes monthly -> workflow commits -> GitHub doesn't pause the schedule after 60 idle days.
-    state["_keepalive"] = time.strftime("%Y-%m")
-    STATE.write_text(json.dumps(state, indent=1))
+
+
+def main():
+    # Workflow starts every 30 min. Night (22-08 IST): one check per run.
+    # Day: re-check every 3 min for ~25 min, until the next run takes over (Actions cron min is 5 min).
+    state = json.loads(STATE.read_text()) if STATE.exists() else {}
+    start = time.time()
+    while True:
+        check(state)
+        now = datetime.now(IST)
+        today = now.strftime("%Y-%m-%d")
+        if now.hour >= 8 and state.get("_heartbeat") != today:
+            lines = "\n".join(f"{n}: {state.get(u)}" for u, n in URLS.items())
+            telegram(f"✅ HMT watcher alive ({today})\n{lines}")
+            state["_heartbeat"] = today  # changes daily -> commit -> schedule never auto-paused
+        STATE.write_text(json.dumps(state, indent=1))
+        if not 8 <= now.hour < 22 or time.time() - start > 24 * 60:
+            break
+        time.sleep(180)
 
 
 def demo():
