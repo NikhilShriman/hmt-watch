@@ -15,7 +15,7 @@ URLS = {  # url -> name shown in the alert
     "https://www.hmtwatches.in/product-1247-hmt-pilot-automatic-ls-black-black-strap": "Pilot Automatic LS Black, black strap (.in)",
     "https://www.hmtwatches.in/product-1115-hmt-janata-automatic-white": "Janata Automatic White (.in)",
 }
-FAST = [u for u, n in URLS.items() if "Janata" in n]  # sells out in minutes: poll every 30s
+FAST = [u for u, n in URLS.items() if "Janata" in n]  # sells out in minutes: poll every 10s by day
 STATE = Path(__file__).with_name("state.json")
 IST = timezone(timedelta(hours=5, minutes=30))
 UA = {
@@ -75,6 +75,9 @@ def check(state, urls):
         print(datetime.now(IST).strftime("%H:%M:%S"), url, s)
         if s != state.get(url):
             if s == "in":
+                if url in FAST and os.environ.get("NTFY_TOPIC"):  # wakes the cart-tab userscript instantly
+                    subprocess.run(["curl", "-s", "-m", "10", "-d", url, f"https://ntfy.sh/{os.environ['NTFY_TOPIC']}"],
+                                   capture_output=True)
                 others = "\n".join(u for u in FAST if u != url)
                 telegram(f"🟢 HMT {name} IN STOCK\n{url}\n\nRestock wave? Check Janata now:\n{others}")
             elif s == "unknown":
@@ -109,7 +112,7 @@ def main():
             subprocess.run(["curl", "-sf", "-m", "10", "--retry", "3", os.environ["HC_URL"]], capture_output=True)
         if time.time() - start > 320 * 60:
             break
-        time.sleep(30 if day else 120)
+        time.sleep(10 if day else 120)  # GitHub IP, not home IP; ERRS tolerates 429s
 
 
 def demo():

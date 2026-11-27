@@ -18,6 +18,7 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT: ${{ secrets.TG_CHAT }}
           HC_URL: ${{ secrets.HC_URL }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       - name: Save state
         run: |
           git diff --quiet state.json && exit 0
