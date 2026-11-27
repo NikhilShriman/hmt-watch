@@ -15,6 +15,7 @@ URLS = {  # url -> name shown in the alert
     "https://www.hmtwatches.in/product-1247-hmt-pilot-automatic-ls-black-black-strap": "Pilot Automatic LS Black, black strap (.in)",
     "https://www.hmtwatches.in/product-1115-hmt-janata-automatic-white": "Janata Automatic White (.in)",
 }
+FAST = [u for u, n in URLS.items() if "Janata" in n]  # sells out in minutes: poll every 30s
 STATE = Path(__file__).with_name("state.json")
 IST = timezone(timedelta(hours=5, minutes=30))
 UA = {
@@ -56,17 +57,26 @@ def telegram(text):
                    check=True, capture_output=True)
 
 
-def check(state):
-    for url, name in URLS.items():
+ERRS = {}  # url -> consecutive fetch errors (429s are common; don't alert on one)
+
+
+def check(state, urls):
+    for url in urls:
+        name = URLS[url]
         try:
             s = status(url, fetch(url))
+            ERRS[url] = 0
         except Exception as e:
-            s = "unknown"
+            ERRS[url] = ERRS.get(url, 0) + 1
             print(url, "fetch error:", e, file=sys.stderr)
-        print(url, s)
+            if ERRS[url] < 10:
+                continue
+            s = "unknown"
+        print(datetime.now(IST).strftime("%H:%M:%S"), url, s)
         if s != state.get(url):
             if s == "in":
-                telegram(f"🟢 HMT {name} IN STOCK\n{url}")
+                others = "\n".join(u for u in FAST if u != url)
+                telegram(f"🟢 HMT {name} IN STOCK\n{url}\n\nRestock wave? Check Janata now:\n{others}")
             elif s == "unknown":
                 telegram(f"⚠️ HMT watcher can't read stock status for {name} (blocked or page changed)\n{url}")
             elif state.get(url) == "in":
@@ -79,8 +89,15 @@ def main():
     # loops ~5.5h itself (job limit 6h, free on public repo): every 3 min by day, 15 min at night.
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     start = time.time()
+    last_full = 0
     while True:
-        check(state)
+        now = datetime.now(IST)
+        day = 8 <= now.hour < 22
+        if time.time() - last_full >= (180 if day else 900) - 5:
+            check(state, list(URLS))
+            last_full = time.time()
+        else:
+            check(state, FAST)
         now = datetime.now(IST)
         today = now.strftime("%Y-%m-%d")
         if now.hour >= 8 and state.get("_heartbeat") != today:
@@ -92,7 +109,7 @@ def main():
             subprocess.run(["curl", "-sf", "-m", "10", "--retry", "3", os.environ["HC_URL"]], capture_output=True)
         if time.time() - start > 320 * 60:
             break
-        time.sleep(180 if 8 <= now.hour < 22 else 900)
+        time.sleep(30 if day else 120)
 
 
 def demo():
